@@ -22,6 +22,19 @@ npm install
 npm run dev   # → http://localhost:5173
 ```
 
+## Docker
+
+A production-oriented container setup is available in [Dockerfile](Dockerfile).
+
+Quick commands:
+
+```bash
+docker build -t resource-editor:latest .
+docker run --rm -p 4173:4173 resource-editor:latest
+```
+
+Build-time and runtime environment variables are documented in [docs/docker.md](docs/docker.md).
+
 ## Project Structure
 
 ```text

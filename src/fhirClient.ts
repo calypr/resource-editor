@@ -14,11 +14,19 @@ export const FHIR_SERVERS: Record<string, string> = {
 
 // Runtime base — defaults to dev proxy in dev, real URL in prod
 const isDev = import.meta.env.DEV;
-let _base = isDev ? '/fhir-proxy' : 'https://google-fhir.fhir-aggregator.org';
+const configuredBase = import.meta.env.VITE_FHIR_BASE_URL?.trim();
+const normalizeBase = (url: string): string => url.replace(/\/+$/, '');
+let _base = normalizeBase(
+  configuredBase && configuredBase.length > 0
+    ? configuredBase
+    : isDev
+      ? '/fhir-proxy'
+      : 'https://google-fhir.fhir-aggregator.org'
+);
 
 export const getBase = () => _base;
 export const setBase = (url: string) => {
-  _base = url;
+  _base = normalizeBase(url);
 };
 
 export async function fhirSearch<T extends Resource>(

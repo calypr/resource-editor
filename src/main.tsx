@@ -19,17 +19,34 @@ import { setCrudProvider } from './localCrudStore';
 // In dev the Vite proxy rewrites /fhir-proxy → https://google-fhir.fhir-aggregator.org
 // to sidestep browser CORS restrictions.
 const isDev = import.meta.env.DEV;
+const configuredFhirBaseUrl = import.meta.env.VITE_FHIR_BASE_URL?.trim();
+const configuredSchemaBaseUrl = import.meta.env.VITE_SCHEMA_BASE_URL?.trim();
+
+const ensureTrailingSlash = (url: string): string =>
+  url.endsWith('/') ? url : `${url}/`;
+
+const fhirBaseUrl = ensureTrailingSlash(
+  configuredFhirBaseUrl
+    ? configuredFhirBaseUrl
+    : isDev
+      ? window.location.origin + '/fhir-proxy/'
+      : 'https://google-fhir.fhir-aggregator.org/'
+);
+
+const schemaBaseUrl = configuredSchemaBaseUrl
+  ? configuredSchemaBaseUrl
+  : isDev
+    ? window.location.origin + '/schema-proxy/R5'
+    : 'https://hl7.org/fhir/R5';
 
 setFhirSchemaProvider(
   createDefaultR5SchemaProvider({
-    baseUrl: isDev ? window.location.origin + '/schema-proxy/R5' : 'https://hl7.org/fhir/R5',
+    baseUrl: schemaBaseUrl,
   })
 );
 
 export const medplum = new SchemaAwareMedplumClient({
-  baseUrl: isDev
-    ? window.location.origin + '/fhir-proxy/'
-    : 'https://google-fhir.fhir-aggregator.org/',
+  baseUrl: fhirBaseUrl,
   fhirUrlPath: '',
   onUnauthenticated: () => { /* public server — no auth required */ },
 });
