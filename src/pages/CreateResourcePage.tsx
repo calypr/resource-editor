@@ -1,57 +1,77 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Button, Paper, Stack, Text, TextInput, Textarea, Title } from '@mantine/core';
+import { Alert, Button, Paper, SegmentedControl, Select, Stack, Text, Textarea, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import type { Resource } from '@medplum/fhirtypes';
+import { ResourceForm } from '@medplum/react';
+import type { ResearchStudy, Resource } from '@medplum/fhirtypes';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { saveLocalResourceDraft } from '../localCrudStore';
 
-function buildTemplate(resourceType: string): string {
+const RESOURCE_TYPE_OPTIONS = [
+  'ResearchStudy',
+  'ResearchSubject',
+  'Specimen',
+  'Patient',
+  'Observation',
+  'Condition',
+  'Procedure',
+  'MedicationRequest',
+].map((value) => ({ label: value, value }));
+
+function buildTemplateResource(resourceType: string): Resource {
   const id = crypto.randomUUID();
 
   if (resourceType === 'ResearchStudy') {
-    return JSON.stringify(
-      {
-        resourceType,
-        id,
-        status: 'active',
-        title: 'New Research Study',
-      },
-      null,
-      2
-    );
-  }
-
-  return JSON.stringify(
-    {
+    return {
       resourceType,
       id,
-    },
-    null,
-    2
-  );
+      status: 'active',
+      title: 'New Research Study',
+    } as ResearchStudy;
+  }
+
+  return {
+    resourceType,
+    id,
+  } as Resource;
 }
 
 export function CreateResourcePage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const [resourceType, setResourceType] = useState(searchParams.get('resourceType') ?? 'ResearchStudy');
-  const [jsonValue, setJsonValue] = useState(buildTemplate(searchParams.get('resourceType') ?? 'ResearchStudy'));
+  const [searchParams, setSearchParams] = useSearchParams();
+  const defaultType = searchParams.get('resourceType') ?? 'ResearchStudy';
+  const [editorMode, setEditorMode] = useState<'form' | 'json'>('form');
+  const [draftResource, setDraftResource] = useState<Resource>(buildTemplateResource(defaultType));
+  const [jsonValue, setJsonValue] = useState(JSON.stringify(buildTemplateResource(defaultType), null, 2));
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSavingJson, setIsSavingJson] = useState(false);
 
   useEffect(() => {
-    setJsonValue(buildTemplate(resourceType || 'ResearchStudy'));
+    const resourceType = searchParams.get('resourceType') ?? 'ResearchStudy';
+    const template = buildTemplateResource(resourceType);
+    setDraftResource(template);
+    setJsonValue(JSON.stringify(template, null, 2));
+    setEditorMode('form');
     setError(null);
-  }, [resourceType]);
+  }, [searchParams]);
 
-  async function handleSave(): Promise<void> {
+  async function finalizeSave(resource: Resource): Promise<void> {
+    saveLocalResourceDraft(resource, 'created');
+    notifications.show({
+      color: 'teal',
+      message: `${resource.resourceType}/${resource.id} saved locally`,
+    });
+
+    navigate(resource.resourceType === 'ResearchStudy' ? `/study/${resource.id}` : `/resource/${resource.resourceType}/${resource.id}`);
+  }
+
+  async function handleJsonSave(): Promise<void> {
     try {
-      setIsSaving(true);
+      setIsSavingJson(true);
       setError(null);
 
       const parsed = JSON.parse(jsonValue) as Record<string, unknown>;
-      const nextResourceType = String(parsed.resourceType ?? resourceType).trim();
+      const nextResourceType = String(parsed.resourceType ?? draftResource.resourceType).trim();
       if (!nextResourceType) {
         throw new Error('resourceType is required');
       }
@@ -63,17 +83,37 @@ export function CreateResourcePage() {
         id: nextId,
       } as Resource;
 
-      saveLocalResourceDraft(resource, 'created');
-      notifications.show({
-        color: 'teal',
-        message: `${resource.resourceType}/${resource.id} saved locally`,
-      });
-
-      navigate(resource.resourceType === 'ResearchStudy' ? `/study/${resource.id}` : `/resource/${resource.resourceType}/${resource.id}`);
+      await finalizeSave(resource);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to create resource');
     } finally {
-      setIsSaving(false);
+      setIsSavingJson(false);
+    }
+  }
+
+  async function handleFormSubmit(nextResource: Resource): Promise<void> {
+    try {
+      setError(null);
+      const nextResourceType = nextResource.resourceType.trim();
+      if (!nextResourceType) {
+        throw new Error('resourceType is required');
+      }
+
+      const nextId = typeof nextResource.id === 'string' && nextResource.id.trim()
+        ? nextResource.id.trim()
+        : crypto.randomUUID();
+
+      const normalized = {
+        ...nextResource,
+        resourceType: nextResourceType,
+        id: nextId,
+      } as Resource;
+
+      setDraftResource(normalized);
+      setJsonValue(JSON.stringify(normalized, null, 2));
+      await finalizeSave(normalized);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to create resource');
     }
   }
 
@@ -99,21 +139,70 @@ export function CreateResourcePage() {
 
       <Paper p="md" withBorder radius="md">
         <Stack gap="md">
-          <TextInput
+          <Select
             label="Resource type"
-            value={resourceType}
-            onChange={(event) => setResourceType(event.currentTarget.value)}
-            placeholder="ResearchStudy"
+            data={RESOURCE_TYPE_OPTIONS}
+            value={draftResource.resourceType}
+            onChange={(value) => {
+              if (!value || value === draftResource.resourceType) {
+                return;
+              }
+
+              setSearchParams({ resourceType: value });
+            }}
           />
 
-          <Textarea
-            label="FHIR JSON"
-            autosize
-            minRows={16}
-            value={jsonValue}
-            onChange={(event) => setJsonValue(event.currentTarget.value)}
-            styles={{ input: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' } }}
+          <SegmentedControl
+            value={editorMode}
+            onChange={(value) => {
+              const nextMode = value as 'form' | 'json';
+              setError(null);
+
+              if (nextMode === 'json') {
+                setJsonValue(JSON.stringify(draftResource, null, 2));
+                setEditorMode(nextMode);
+                return;
+              }
+
+              try {
+                const parsed = JSON.parse(jsonValue) as Resource;
+                setDraftResource(parsed);
+                setEditorMode(nextMode);
+              } catch {
+                setError('Cannot switch to form mode until JSON is valid');
+              }
+            }}
+            data={[
+              { label: 'Form', value: 'form' },
+              { label: 'JSON (advanced)', value: 'json' },
+            ]}
           />
+
+          {editorMode === 'form' && (
+            <ResourceForm
+              key={`${draftResource.resourceType}/${draftResource.id ?? 'new'}`}
+              defaultValue={draftResource}
+              onPatch={(next) => {
+                const typed = next as Resource;
+                setDraftResource(typed);
+                setJsonValue(JSON.stringify(typed, null, 2));
+              }}
+              onSubmit={(next) => {
+                void handleFormSubmit(next);
+              }}
+            />
+          )}
+
+          {editorMode === 'json' && (
+            <Textarea
+              label="FHIR JSON"
+              autosize
+              minRows={16}
+              value={jsonValue}
+              onChange={(event) => setJsonValue(event.currentTarget.value)}
+              styles={{ input: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' } }}
+            />
+          )}
 
           {error && (
             <Alert color="red" title="Invalid JSON">
@@ -121,9 +210,11 @@ export function CreateResourcePage() {
             </Alert>
           )}
 
-          <Button w="fit-content" loading={isSaving} onClick={() => void handleSave()}>
-            Save locally
-          </Button>
+          {editorMode === 'json' && (
+            <Button w="fit-content" loading={isSavingJson} onClick={() => void handleJsonSave()}>
+              Save locally
+            </Button>
+          )}
         </Stack>
       </Paper>
     </Stack>

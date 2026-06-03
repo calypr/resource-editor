@@ -10,6 +10,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/fhir-proxy/, ''),
       },
+      '/schema-proxy': {
+        target: 'https://hl7.org/fhir',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/schema-proxy/, ''),
+      },
     },
   },
 });

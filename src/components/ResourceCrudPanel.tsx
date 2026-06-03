@@ -1,16 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Alert, Badge, Button, Group, Paper, Stack, Text, Textarea } from '@mantine/core';
+import { Alert, Badge, Button, Group, Paper, SegmentedControl, Stack, Text, Textarea } from '@mantine/core';
 import type { Resource } from '@medplum/fhirtypes';
+import { ResourceForm, ResourceTable } from '@medplum/react';
 import type { LocalResourceMode } from '../localCrudStore';
-
-interface ResourceCrudPanelProps {
-  resource: Resource;
-  localMode: LocalResourceMode | null;
-  onSave: (resource: Resource) => Promise<void> | void;
-  onDelete: () => Promise<void> | void;
-  onRestore?: () => Promise<void> | void;
-  isDeleted?: boolean;
-}
 
 function getStatusColor(localMode: LocalResourceMode | null): string {
   if (localMode === 'created') {
@@ -54,19 +46,20 @@ export function ResourceCrudPanel<T extends Resource>({
   isDeleted = false,
 }: TypedResourceCrudPanelProps<T>) {
   const [isEditing, setIsEditing] = useState(false);
+  const [editMode, setEditMode] = useState<'form' | 'json'>('form');
+  const [draftResource, setDraftResource] = useState(resource);
   const [jsonValue, setJsonValue] = useState(JSON.stringify(resource, null, 2));
   const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (!isEditing) {
+      setDraftResource(resource);
       setJsonValue(JSON.stringify(resource, null, 2));
     }
   }, [isEditing, resource]);
 
-  async function handleSave(): Promise<void> {
+  async function handleJsonSave(): Promise<void> {
     try {
-      setIsSubmitting(true);
       setError(null);
 
       const parsed = JSON.parse(jsonValue) as Record<string, unknown>;
@@ -82,8 +75,27 @@ export function ResourceCrudPanel<T extends Resource>({
       setIsEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save resource');
-    } finally {
-      setIsSubmitting(false);
+    }
+  }
+
+  async function handleFormSubmit(nextResource: Resource): Promise<void> {
+    try {
+      setError(null);
+
+      if (nextResource.resourceType !== resource.resourceType) {
+        throw new Error(`resourceType must remain ${resource.resourceType}`);
+      }
+
+      if (nextResource.id !== resource.id) {
+        throw new Error(`id must remain ${resource.id}`);
+      }
+
+      await onSave(nextResource as T);
+      setDraftResource(nextResource as T);
+      setJsonValue(JSON.stringify(nextResource, null, 2));
+      setIsEditing(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to save resource');
     }
   }
 
@@ -107,15 +119,68 @@ export function ResourceCrudPanel<T extends Resource>({
             This resource is hidden locally. Restore it to resume browsing the server copy.
           </Alert>
         ) : (
-          <Textarea
-            label="FHIR JSON"
-            autosize
-            minRows={14}
-            value={jsonValue}
-            onChange={(event) => setJsonValue(event.currentTarget.value)}
-            readOnly={!isEditing}
-            styles={{ input: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' } }}
-          />
+          <>
+            {isEditing && (
+              <SegmentedControl
+                value={editMode}
+                onChange={(value) => {
+                  const nextMode = value as 'form' | 'json';
+                  setError(null);
+
+                  if (nextMode === 'json') {
+                    setJsonValue(JSON.stringify(draftResource, null, 2));
+                    setEditMode(nextMode);
+                    return;
+                  }
+
+                  try {
+                    const parsed = JSON.parse(jsonValue) as T;
+                    setDraftResource(parsed);
+                    setEditMode(nextMode);
+                  } catch {
+                    setError('Cannot switch to form mode until JSON is valid');
+                  }
+                }}
+                data={[
+                  { label: 'Form', value: 'form' },
+                  { label: 'JSON', value: 'json' },
+                ]}
+              />
+            )}
+
+            {!isEditing && (
+              <ResourceTable
+                value={resource}
+                forceUseInput
+              />
+            )}
+
+            {isEditing && editMode === 'form' && (
+              <ResourceForm
+                key={`${resource.resourceType}/${resource.id}`}
+                defaultValue={draftResource}
+                onPatch={(next) => {
+                  const typed = next as T;
+                  setDraftResource(typed);
+                  setJsonValue(JSON.stringify(typed, null, 2));
+                }}
+                onSubmit={(next) => {
+                  void handleFormSubmit(next);
+                }}
+              />
+            )}
+
+            {isEditing && editMode === 'json' && (
+              <Textarea
+                label="FHIR JSON"
+                autosize
+                minRows={14}
+                value={jsonValue}
+                onChange={(event) => setJsonValue(event.currentTarget.value)}
+                styles={{ input: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace' } }}
+              />
+            )}
+          </>
         )}
 
         {error && (
@@ -126,13 +191,37 @@ export function ResourceCrudPanel<T extends Resource>({
 
         <Group>
           {!isDeleted && !isEditing && (
-            <Button variant="light" onClick={() => setIsEditing(true)}>
+            <Button
+              variant="light"
+              onClick={() => {
+                setError(null);
+                setEditMode('form');
+                setDraftResource(resource);
+                setJsonValue(JSON.stringify(resource, null, 2));
+                setIsEditing(true);
+              }}
+            >
+              Edit form
+            </Button>
+          )}
+
+          {!isDeleted && !isEditing && (
+            <Button
+              variant="default"
+              onClick={() => {
+                setError(null);
+                setEditMode('json');
+                setDraftResource(resource);
+                setJsonValue(JSON.stringify(resource, null, 2));
+                setIsEditing(true);
+              }}
+            >
               Edit JSON
             </Button>
           )}
 
-          {!isDeleted && isEditing && (
-            <Button loading={isSubmitting} onClick={handleSave}>
+          {!isDeleted && isEditing && editMode === 'json' && (
+            <Button onClick={() => void handleJsonSave()}>
               Save locally
             </Button>
           )}
@@ -142,6 +231,7 @@ export function ResourceCrudPanel<T extends Resource>({
               variant="default"
               onClick={() => {
                 setError(null);
+                setDraftResource(resource);
                 setJsonValue(JSON.stringify(resource, null, 2));
                 setIsEditing(false);
               }}

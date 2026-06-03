@@ -5,10 +5,14 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MantineProvider, createTheme } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
-import { MedplumClient } from '@medplum/core';
 import { MedplumProvider } from '@medplum/react';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import {
+  createDefaultR5SchemaProvider,
+  SchemaAwareMedplumClient,
+  setFhirSchemaProvider,
+} from './fhirSchemaProvider';
 import { setCrudProvider } from './localCrudStore';
 // import { createCustomBackendCrudProvider } from './plugins/customBackendCrudProvider';
 
@@ -16,7 +20,13 @@ import { setCrudProvider } from './localCrudStore';
 // to sidestep browser CORS restrictions.
 const isDev = import.meta.env.DEV;
 
-export const medplum = new MedplumClient({
+setFhirSchemaProvider(
+  createDefaultR5SchemaProvider({
+    baseUrl: isDev ? window.location.origin + '/schema-proxy/R5' : 'https://hl7.org/fhir/R5',
+  })
+);
+
+export const medplum = new SchemaAwareMedplumClient({
   baseUrl: isDev
     ? window.location.origin + '/fhir-proxy/'
     : 'https://google-fhir.fhir-aggregator.org/',
@@ -31,6 +41,8 @@ const theme = createTheme({
 
 // Optional plugin swap point for CRUD persistence.
 // setCrudProvider(createCustomBackendCrudProvider({ baseUrl: 'https://your-crud-api.example.com' }));
+// Optional plugin swap point for schema access.
+// setFhirSchemaProvider(createCustomFhirSchemaProvider({ ... }));
 void setCrudProvider;
 
 createRoot(document.getElementById('root')!).render(
