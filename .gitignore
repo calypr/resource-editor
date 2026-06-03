@@ -2,3 +2,50 @@ node_modules
 dist
 .env*
 *.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Dependency directories
+.pnpm-store
+.npm
+.yarn
+
+# Build caches and tooling output
+.cache
+.parcel-cache
+.vite
+coverage
+.nyc_output
+*.tsbuildinfo
+
+# Framework build output
+.next
+.nuxt
+.svelte-kit
+out
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+.idea
+*.swp
+*.swo
