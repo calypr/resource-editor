@@ -9,6 +9,8 @@ import { MedplumClient } from '@medplum/core';
 import { MedplumProvider } from '@medplum/react';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
+import { setCrudProvider } from './localCrudStore';
+// import { createCustomBackendCrudProvider } from './plugins/customBackendCrudProvider';
 
 // In dev the Vite proxy rewrites /fhir-proxy → https://google-fhir.fhir-aggregator.org
 // to sidestep browser CORS restrictions.
@@ -26,6 +28,10 @@ const theme = createTheme({
   primaryColor: 'teal',
   fontFamily: 'Inter, system-ui, sans-serif',
 });
+
+// Optional plugin swap point for CRUD persistence.
+// setCrudProvider(createCustomBackendCrudProvider({ baseUrl: 'https://your-crud-api.example.com' }));
+void setCrudProvider;
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

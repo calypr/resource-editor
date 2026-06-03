@@ -2,9 +2,11 @@ import { Card, Text, Title, Badge, Group, Stack, Button } from '@mantine/core';
 import type { ResearchStudy } from '@medplum/fhirtypes';
 import { CodeableConceptDisplay } from '@medplum/react';
 import { Link } from 'react-router-dom';
+import type { LocalResourceMode } from '../localCrudStore';
 
 interface StudyCardProps {
   study: ResearchStudy;
+  localMode?: LocalResourceMode | null;
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -18,7 +20,7 @@ function getStudyTitle(study: ResearchStudy): string {
   return study.title ?? study.identifier?.[0]?.value ?? study.id ?? 'Unnamed Study';
 }
 
-export function StudyCard({ study }: StudyCardProps) {
+export function StudyCard({ study, localMode = null }: StudyCardProps) {
   const color = STATUS_COLORS[study.status ?? ''] ?? 'gray';
 
   return (
@@ -32,6 +34,12 @@ export function StudyCard({ study }: StudyCardProps) {
             {study.status ?? 'unknown'}
           </Badge>
         </Group>
+
+        {localMode && (
+          <Badge color={localMode === 'created' ? 'blue' : 'orange'} variant="outline" size="xs" w="fit-content">
+            {localMode === 'created' ? 'Local create' : 'Local update'}
+          </Badge>
+        )}
 
         {study.identifier?.slice(0, 2).map((id, i) => (
           <Text key={i} size="xs" c="dimmed" ff="monospace" truncate>

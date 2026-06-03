@@ -9,7 +9,9 @@ that lets you explore biomedical research data from [fhir-aggregator.org](https:
 - 🔍 Search studies by identifier (e.g. `TCGA-BRCA`) with quick-pick buttons
 - 📋 Study detail view: description, focus, keywords, subjects, specimens
 - 🧬 **ResearchSubject** and **Specimen** tables with drill-through navigation
-- 🗃️ Raw FHIR viewer via Medplum's `<ResourceTable>` component
+- 🗃️ Raw FHIR JSON viewer
+- ✏️ Local create, update, and delete overlay for read-only servers
+- 🔌 CRUD provider plugin contract (`CrudProvider`) for swapping local storage with a custom backend
 - 🌐 Server selector — swap FHIR base at runtime
 - 🚀 Vite dev proxy avoids browser CORS restrictions in development
 
@@ -22,11 +24,14 @@ npm run dev   # → http://localhost:5173
 
 ## Project Structure
 
-```
+```text
 src/
 ├── main.tsx                    # App bootstrap: MedplumProvider + MantineProvider
 ├── App.tsx                     # Router / route definitions
-├── fhirClient.ts               # Thin fetch wrapper for fhir-aggregator.org
+├── fhirClient.ts               # Thin fetch wrapper + CRUD overlay application
+├── localCrudStore.ts           # CRUD provider contract + active provider registry
+├── plugins/
+│   └── customBackendCrudProvider.ts # Template plugin for backend CRUD persistence
 ├── components/
 │   ├── AppLayout.tsx           # AppShell header + server switcher
 │   └── StudyCard.tsx           # ResearchStudy summary card
@@ -38,7 +43,7 @@ src/
 
 ## Key FHIR Aggregator Endpoints
 
-```
+```text
 FHIR_BASE = https://google-fhir.fhir-aggregator.org
 
 GET /ResearchStudy?_count=12&_sort=-_lastUpdated
@@ -52,7 +57,7 @@ GET /{ResourceType}/{id}
 ## Medplum Components Used
 
 | Component | Usage |
-|---|---|
+| --- | --- |
 | `<MedplumProvider>` | Supplies `MedplumClient` context to the whole tree |
 | `<ResourceTable value={resource} />` | Renders any FHIR resource as a structured key/value table |
 | `<CodeableConceptDisplay value={...} />` | Renders FHIR `CodeableConcept` display text |
@@ -63,3 +68,23 @@ The Vite dev server proxies `/fhir-proxy/*` → `https://google-fhir.fhir-aggreg
 to avoid browser CORS restrictions during local development.
 
 For production, deploy behind a reverse proxy or configure CORS on the FHIR server.
+
+## CRUD Plugin Architecture
+
+The app uses a provider pattern so CRUD persistence can be swapped without changing pages/components.
+
+- `CrudProvider` interface in `src/localCrudStore.ts`
+- Active provider registry via `setCrudProvider(...)`
+- Default provider: local storage (`createLocalStorageCrudProvider()`)
+- Custom backend template: `src/plugins/customBackendCrudProvider.ts`
+
+To switch providers during bootstrap, register your implementation in `src/main.tsx` before rendering:
+
+```ts
+import { setCrudProvider } from './localCrudStore';
+import { createCustomBackendCrudProvider } from './plugins/customBackendCrudProvider';
+
+setCrudProvider(createCustomBackendCrudProvider({
+    baseUrl: 'https://your-crud-api.example.com',
+}));
+```

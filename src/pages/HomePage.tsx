@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ActionIcon, Alert, Badge, Button, Center, Group,
   Loader, Pagination, SimpleGrid, Stack, Text, TextInput, Title,
@@ -7,6 +8,7 @@ import { IconRefresh, IconSearch } from '@tabler/icons-react';
 import type { ResearchStudy } from '@medplum/fhirtypes';
 import { fhirSearch, bundleEntries } from '../fhirClient';
 import { StudyCard } from '../components/StudyCard';
+import { listLocalResourceDrafts, type LocalResourceMode, useLocalCrudState } from '../localCrudStore';
 
 const PAGE_SIZE = 12;
 
@@ -18,11 +20,43 @@ const QUICK_PICKS = [
 
 export function HomePage() {
   const [query, setQuery] = useState('');
-  const [studies, setStudies] = useState<ResearchStudy[]>([]);
+  const [serverStudies, setServerStudies] = useState<ResearchStudy[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const crudState = useLocalCrudState();
+
+  const localDrafts = useMemo(() => listLocalResourceDrafts<ResearchStudy>('ResearchStudy'), [crudState]);
+  const localModes = useMemo(
+    () => new Map<string, LocalResourceMode>(localDrafts.map((draft) => [draft.resource.id ?? '', draft.mode])),
+    [localDrafts]
+  );
+
+  const studies = useMemo(() => {
+    const createdStudies = localDrafts
+      .filter((draft) => draft.mode === 'created')
+      .map((draft) => draft.resource)
+      .filter((study) => {
+        if (!query.trim()) {
+          return true;
+        }
+
+        const haystack = [
+          study.id,
+          study.title,
+          ...(study.identifier ?? []).map((identifier) => identifier.value),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+
+        return haystack.includes(query.trim().toLowerCase());
+      });
+
+    const createdIds = new Set(createdStudies.map((study) => study.id));
+    return [...createdStudies, ...serverStudies.filter((study) => !createdIds.has(study.id))];
+  }, [localDrafts, query, serverStudies]);
 
   const search = useCallback(async (q: string, p: number) => {
     setLoading(true);
@@ -36,7 +70,7 @@ export function HomePage() {
       if (q.trim()) params['identifier'] = q.trim();
 
       const bundle = await fhirSearch<ResearchStudy>('ResearchStudy', params);
-      setStudies(bundleEntries(bundle));
+      setServerStudies(bundleEntries(bundle));
       setTotal(bundle.total ?? 0);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to fetch studies');
@@ -76,6 +110,9 @@ export function HomePage() {
         />
         <Button onClick={handleSearch} loading={loading} leftSection={<IconSearch size={15} />}>
           Search
+        </Button>
+        <Button component={Link} to="/resource/new?resourceType=ResearchStudy" variant="light">
+          New Study
         </Button>
         <ActionIcon variant="light" size="lg" title="Reset" onClick={handleReset}>
           <IconRefresh size={15} />
@@ -117,10 +154,13 @@ export function HomePage() {
 
       {!loading && studies.length > 0 && (
         <>
-          <Text size="xs" c="dimmed">{total.toLocaleString()} studies found</Text>
+          <Text size="xs" c="dimmed">
+            Showing {studies.length.toLocaleString()} studies on this page
+            {total > 0 ? ` (${total.toLocaleString()} reported by server)` : ''}
+          </Text>
           <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
             {studies.map((study) => (
-              <StudyCard key={study.id} study={study} />
+              <StudyCard key={study.id} study={study} localMode={study.id ? localModes.get(study.id) ?? null : null} />
             ))}
           </SimpleGrid>
           {total > PAGE_SIZE && (

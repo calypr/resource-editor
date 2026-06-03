@@ -1,21 +1,35 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Alert, Anchor, Badge, Button, Center, Grid, Group, Loader,
   Paper, Stack, Table, Tabs, Text, Title,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import type { ResearchStudy, ResearchSubject, Specimen } from '@medplum/fhirtypes';
-import { CodeableConceptDisplay, ResourceTable } from '@medplum/react';
+import { CodeableConceptDisplay } from '@medplum/react';
 import { IconArrowLeft } from '@tabler/icons-react';
+import { RawFhirJson } from '../components/RawFhirJson';
+import { ResourceCrudPanel } from '../components/ResourceCrudPanel';
 import { bundleEntries, fhirRead, fhirSearch } from '../fhirClient';
+import {
+  getLocalResourceMode,
+  isLocallyDeleted,
+  LocallyDeletedResourceError,
+  markResourceDeleted,
+  restoreDeletedResource,
+  saveLocalResourceDraft,
+  useLocalCrudState,
+} from '../localCrudStore';
 
 export function StudyDetailPage() {
+  const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const [study, setStudy] = useState<ResearchStudy | null>(null);
   const [subjects, setSubjects] = useState<ResearchSubject[]>([]);
   const [specimens, setSpecimens] = useState<Specimen[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  useLocalCrudState();
 
   useEffect(() => {
     if (!id) return;
@@ -31,12 +45,95 @@ export function StudyDetailPage() {
         setSubjects(bundleEntries(subBundle));
         setSpecimens(bundleEntries(specBundle));
       })
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => {
+        if (e instanceof LocallyDeletedResourceError) {
+          setStudy(null);
+          setSubjects([]);
+          setSpecimens([]);
+          setError(null);
+          return;
+        }
+
+        setError(e instanceof Error ? e.message : String(e));
+      })
       .finally(() => setLoading(false));
   }, [id]);
 
+  const localMode = id ? getLocalResourceMode('ResearchStudy', id) : null;
+  const deletedLocally = id ? isLocallyDeleted('ResearchStudy', id) : false;
+
+  async function handleSave(nextStudy: ResearchStudy): Promise<void> {
+    saveLocalResourceDraft(nextStudy, localMode === 'created' ? 'created' : 'updated');
+    setStudy(nextStudy);
+    notifications.show({
+      color: 'teal',
+      message: `ResearchStudy/${nextStudy.id} saved locally`,
+    });
+  }
+
+  async function handleDelete(): Promise<void> {
+    if (!id) {
+      return;
+    }
+
+    const wasCreatedLocally = localMode === 'created';
+    markResourceDeleted('ResearchStudy', id);
+    notifications.show({
+      color: 'teal',
+      message: wasCreatedLocally
+        ? `ResearchStudy/${id} removed from local storage`
+        : `ResearchStudy/${id} hidden locally`,
+    });
+
+    if (wasCreatedLocally) {
+      navigate('/');
+      return;
+    }
+
+    setStudy(null);
+    setSubjects([]);
+    setSpecimens([]);
+  }
+
+  async function handleRestore(): Promise<void> {
+    if (!id) {
+      return;
+    }
+
+    restoreDeletedResource('ResearchStudy', id);
+    notifications.show({
+      color: 'teal',
+      message: `ResearchStudy/${id} restored`,
+    });
+  }
+
   if (loading) return <Center py="xl"><Loader size="xl" /></Center>;
   if (error) return <Alert color="red" title="Error">{error}</Alert>;
+
+  if (!study && deletedLocally && id) {
+    return (
+      <Stack gap="lg">
+        <Button
+          component={Link}
+          to="/"
+          variant="subtle"
+          leftSection={<IconArrowLeft size={15} />}
+          size="sm"
+          w="fit-content"
+        >
+          Back to Studies
+        </Button>
+        <Title order={2}>ResearchStudy / {id}</Title>
+        <Alert color="red" title="Deleted locally">
+          This study is hidden from the browser until you restore it.
+        </Alert>
+        <Button w="fit-content" onClick={() => void handleRestore()}>
+          Restore study
+        </Button>
+      </Stack>
+    );
+  }
+
   if (!study) return null;
 
   const title = study.title ?? study.identifier?.[0]?.value ?? `Study ${id}`;
@@ -63,6 +160,14 @@ export function StudyDetailPage() {
         </Stack>
         <Badge size="lg" color="teal" variant="light">{study.status}</Badge>
       </Group>
+
+      <ResourceCrudPanel
+        resource={study}
+        localMode={localMode}
+        onSave={handleSave}
+        onDelete={handleDelete}
+        onRestore={handleRestore}
+      />
 
       <Tabs defaultValue="overview">
         <Tabs.List>
@@ -215,9 +320,7 @@ export function StudyDetailPage() {
         </Tabs.Panel>
 
         <Tabs.Panel value="raw" pt="md">
-          <Paper p="md" withBorder radius="md">
-            <ResourceTable value={study} />
-          </Paper>
+          <RawFhirJson resource={study} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

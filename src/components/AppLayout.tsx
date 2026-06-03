@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AppShell, Group, Title, Text, Select, Container, Anchor } from '@mantine/core';
+import { AppShell, Group, Title, Text, Select, Container, Anchor, Button } from '@mantine/core';
 import { IconDna } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { FHIR_SERVERS, getBase, setBase } from '../fhirClient';
@@ -29,6 +29,9 @@ export function AppLayout({ children }: AppLayoutProps) {
               </Anchor>
             </Group>
             <Group gap="xs">
+              <Button component={Link} to="/resource/new" size="xs" variant="light">
+                New Resource
+              </Button>
               <Text size="sm" c="dimmed" visibleFrom="sm">Server:</Text>
               <Select
                 size="xs"
