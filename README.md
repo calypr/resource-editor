@@ -26,11 +26,22 @@ npm run dev   # → http://localhost:5173
 
 A production-oriented container setup is available in [Dockerfile](Dockerfile).
 
-Quick commands:
+Build and run:
 
 ```bash
 docker build -t resource-editor:latest .
-docker run --rm -p 4173:4173 resource-editor:latest
+docker run --rm --name resource-editor -p 4173:80 resource-editor:latest
+```
+
+Then open `http://localhost:4173`.
+
+Important: the container listens on port `80`, so host mapping must be `-p <host-port>:80`.
+
+If you previously started it with the wrong mapping (for example `-p 4173:4173`), restart with:
+
+```bash
+docker rm -f resource-editor
+docker run --rm --name resource-editor -p 4173:80 resource-editor:latest
 ```
 
 Build-time and runtime environment variables are documented in [docs/docker.md](docs/docker.md).

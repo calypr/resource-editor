@@ -25,7 +25,19 @@ const configuredSchemaBaseUrl = import.meta.env.VITE_SCHEMA_BASE_URL?.trim();
 const ensureTrailingSlash = (url: string): string =>
   url.endsWith('/') ? url : `${url}/`;
 
-const fhirBaseUrl = ensureTrailingSlash(
+const toAbsoluteHttpUrl = (url: string): string => {
+  if (/^https?:\/\//i.test(url)) {
+    return ensureTrailingSlash(url);
+  }
+
+  if (url.startsWith('/')) {
+    return ensureTrailingSlash(new URL(url, window.location.origin).toString());
+  }
+
+  return ensureTrailingSlash(url);
+};
+
+const fhirBaseUrl = toAbsoluteHttpUrl(
   configuredFhirBaseUrl
     ? configuredFhirBaseUrl
     : isDev
