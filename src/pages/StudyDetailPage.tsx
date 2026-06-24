@@ -8,7 +8,6 @@ import { notifications } from '@mantine/notifications';
 import type { ResearchStudy, ResearchSubject, Specimen } from '@medplum/fhirtypes';
 import { CodeableConceptDisplay } from '@medplum/react';
 import { IconArrowLeft } from '@tabler/icons-react';
-import { RawFhirJson } from '../components/RawFhirJson';
 import { ResourceCrudPanel } from '../components/ResourceCrudPanel';
 import { bundleEntries, fhirRead, fhirSearch } from '../fhirClient';
 import {
@@ -178,7 +177,6 @@ export function StudyDetailPage() {
           <Tabs.Tab value="specimens">
             Specimens{specimens.length > 0 ? ` (${specimens.length})` : ''}
           </Tabs.Tab>
-          <Tabs.Tab value="raw">Raw FHIR</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="overview" pt="md">
@@ -319,9 +317,6 @@ export function StudyDetailPage() {
           )}
         </Tabs.Panel>
 
-        <Tabs.Panel value="raw" pt="md">
-          <RawFhirJson resource={study} />
-        </Tabs.Panel>
       </Tabs>
     </Stack>
   );
