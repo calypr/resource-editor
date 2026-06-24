@@ -5,9 +5,16 @@ import { notifications } from '@mantine/notifications';
 import { ResourceForm } from '@medplum/react';
 import type { ResearchStudy, Resource } from '@medplum/fhirtypes';
 import { IconArrowLeft } from '@tabler/icons-react';
+import {
+  applyCodeFieldOverrides,
+  getCodeFieldOverrideValues,
+  type CodeFieldOverrideValues,
+} from '../codeFieldOptions';
+import { CodeFieldOverrides } from '../components/CodeFieldOverrides';
 import { applyEmptyFieldVisibility, ensureReferenceIdentifierHints } from '../formEmptyFieldVisibility';
 import { saveLocalResourceDraft } from '../localCrudStore';
 import { stripEmptyFields } from '../stripEmptyFields';
+import { getResourceProfileUrl, ResourceExtensionsSection } from '../components/ResourceExtensionsSection';
 
 const RESOURCE_TYPE_OPTIONS = [
   'ResearchStudy',
@@ -48,13 +55,18 @@ export function CreateResourcePage() {
   const [error, setError] = useState<string | null>(null);
   const [isSavingJson, setIsSavingJson] = useState(false);
   const [showEmptyFields, setShowEmptyFields] = useState(false);
+  const [codeFieldOverrides, setCodeFieldOverrides] = useState<CodeFieldOverrideValues>(
+    () => getCodeFieldOverrideValues(buildTemplateResource(defaultType))
+  );
   const formContainerRef = useRef<HTMLDivElement | null>(null);
+  const profileUrl = getResourceProfileUrl(draftResource);
 
   useEffect(() => {
     const resourceType = searchParams.get('resourceType') ?? 'ResearchStudy';
     const template = buildTemplateResource(resourceType);
     setDraftResource(template);
     setJsonValue(JSON.stringify(template, null, 2));
+    setCodeFieldOverrides(getCodeFieldOverrideValues(template));
     setEditorMode('form');
     setError(null);
   }, [searchParams]);
@@ -130,17 +142,18 @@ export function CreateResourcePage() {
   async function handleFormSubmit(nextResource: Resource): Promise<void> {
     try {
       setError(null);
-      const nextResourceType = nextResource.resourceType.trim();
+      const mergedResource = applyCodeFieldOverrides(nextResource, codeFieldOverrides);
+      const nextResourceType = mergedResource.resourceType.trim();
       if (!nextResourceType) {
         throw new Error('resourceType is required');
       }
 
-      const nextId = typeof nextResource.id === 'string' && nextResource.id.trim()
-        ? nextResource.id.trim()
+      const nextId = typeof mergedResource.id === 'string' && mergedResource.id.trim()
+        ? mergedResource.id.trim()
         : crypto.randomUUID();
 
       const normalized = {
-        ...nextResource,
+        ...mergedResource,
         resourceType: nextResourceType,
         id: nextId,
       } as Resource;
@@ -215,6 +228,22 @@ export function CreateResourcePage() {
           />
 
           {editorMode === 'form' && (
+            <CodeFieldOverrides
+              resourceType={draftResource.resourceType}
+              values={codeFieldOverrides}
+              onChange={(field, value) => {
+                setCodeFieldOverrides((previous) => {
+                  const nextOverrides = { ...previous, [field]: value };
+                  const nextDraft = applyCodeFieldOverrides(draftResource, nextOverrides);
+                  setDraftResource(nextDraft);
+                  setJsonValue(JSON.stringify(nextDraft, null, 2));
+                  return nextOverrides;
+                });
+              }}
+            />
+          )}
+
+          {editorMode === 'form' && (
             <Switch
               label="Show empty fields"
               checked={showEmptyFields}
@@ -228,13 +257,16 @@ export function CreateResourcePage() {
             </Text>
           )}
 
+          {editorMode === 'form' && !profileUrl && <ResourceExtensionsSection resource={draftResource} />}
+
           {editorMode === 'form' && (
             <div ref={formContainerRef}>
               <ResourceForm
                 key={`${draftResource.resourceType}/${draftResource.id ?? 'new'}/${showEmptyFields ? 'show-empty' : 'hide-empty'}`}
                 defaultValue={showEmptyFields ? draftResource : stripEmptyFields(draftResource)}
+                profileUrl={profileUrl}
                 onPatch={(next) => {
-                  const typed = next as Resource;
+                  const typed = applyCodeFieldOverrides(next as Resource, codeFieldOverrides);
                   setDraftResource(typed);
                   setJsonValue(JSON.stringify(typed, null, 2));
                 }}

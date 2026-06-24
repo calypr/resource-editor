@@ -5,12 +5,19 @@ import { ResourceForm, ResourceTable } from '@medplum/react';
 import { useNavigate } from 'react-router-dom';
 import type { LocalResourceMode } from '../localCrudStore';
 import {
+  applyCodeFieldOverrides,
+  getCodeFieldOverrideValues,
+  type CodeFieldOverrideValues,
+} from '../codeFieldOptions';
+import {
   applyEmptyFieldVisibility,
   ensureReadOnlyReferenceIdentifierHints,
   ensureReferenceIdentifierHints,
   ensureResourceTypeInfoLink,
 } from '../formEmptyFieldVisibility';
 import { stripEmptyFields } from '../stripEmptyFields';
+import { CodeFieldOverrides } from './CodeFieldOverrides';
+import { getResourceProfileUrl, ResourceExtensionsSection } from './ResourceExtensionsSection';
 
 function getStatusColor(localMode: LocalResourceMode | null): string {
   if (localMode === 'created') {
@@ -60,13 +67,18 @@ export function ResourceCrudPanel<T extends Resource>({
   const [jsonValue, setJsonValue] = useState(JSON.stringify(resource, null, 2));
   const [error, setError] = useState<string | null>(null);
   const [showEmptyFields, setShowEmptyFields] = useState(false);
+  const [codeFieldOverrides, setCodeFieldOverrides] = useState<CodeFieldOverrideValues>(
+    () => getCodeFieldOverrideValues(resource)
+  );
   const formContainerRef = useRef<HTMLDivElement | null>(null);
   const readOnlyContainerRef = useRef<HTMLDivElement | null>(null);
+  const profileUrl = getResourceProfileUrl(resource);
 
   useEffect(() => {
     if (!isEditing) {
       setDraftResource(resource);
       setJsonValue(JSON.stringify(resource, null, 2));
+      setCodeFieldOverrides(getCodeFieldOverrideValues(resource));
     }
   }, [isEditing, resource]);
 
@@ -137,6 +149,7 @@ export function ResourceCrudPanel<T extends Resource>({
 
       event.preventDefault();
       event.stopPropagation();
+      event.stopImmediatePropagation();
       void navigate(href);
     };
 
@@ -170,18 +183,19 @@ export function ResourceCrudPanel<T extends Resource>({
   async function handleFormSubmit(nextResource: Resource): Promise<void> {
     try {
       setError(null);
+      const mergedResource = applyCodeFieldOverrides(nextResource as T, codeFieldOverrides);
 
-      if (nextResource.resourceType !== resource.resourceType) {
+      if (mergedResource.resourceType !== resource.resourceType) {
         throw new Error(`resourceType must remain ${resource.resourceType}`);
       }
 
-      if (nextResource.id !== resource.id) {
+      if (mergedResource.id !== resource.id) {
         throw new Error(`id must remain ${resource.id}`);
       }
 
-      await onSave(nextResource as T);
-      setDraftResource(nextResource as T);
-      setJsonValue(JSON.stringify(nextResource, null, 2));
+      await onSave(mergedResource);
+      setDraftResource(mergedResource);
+      setJsonValue(JSON.stringify(mergedResource, null, 2));
       setIsEditing(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to save resource');
@@ -251,12 +265,28 @@ export function ResourceCrudPanel<T extends Resource>({
                   value={showEmptyFields ? resource : stripEmptyFields(resource)}
                   ignoreMissingValues={!showEmptyFields}
                   forceUseInput
+                  profileUrl={profileUrl}
                 />
               </div>
             )}
 
+            {!isEditing && !profileUrl && <ResourceExtensionsSection resource={resource} />}
+
             {isEditing && editMode === 'form' && (
               <Stack gap="xs">
+                  <CodeFieldOverrides
+                    resourceType={draftResource.resourceType}
+                    values={codeFieldOverrides}
+                    onChange={(field, value) => {
+                      setCodeFieldOverrides((previous) => {
+                        const nextOverrides = { ...previous, [field]: value };
+                        const nextDraft = applyCodeFieldOverrides(draftResource, nextOverrides);
+                        setDraftResource(nextDraft);
+                        setJsonValue(JSON.stringify(nextDraft, null, 2));
+                        return nextOverrides;
+                      });
+                    }}
+                  />
                 <Switch
                   label="Show empty fields"
                   checked={showEmptyFields}
@@ -269,8 +299,9 @@ export function ResourceCrudPanel<T extends Resource>({
                   <ResourceForm
                     key={`${resource.resourceType}/${resource.id}/${showEmptyFields ? 'show-empty' : 'hide-empty'}`}
                     defaultValue={showEmptyFields ? draftResource : stripEmptyFields(draftResource)}
+                    profileUrl={profileUrl}
                     onPatch={(next) => {
-                      const typed = next as T;
+                      const typed = applyCodeFieldOverrides(next as T, codeFieldOverrides);
                       setDraftResource(typed);
                       setJsonValue(JSON.stringify(typed, null, 2));
                     }}
@@ -281,6 +312,8 @@ export function ResourceCrudPanel<T extends Resource>({
                 </div>
               </Stack>
             )}
+
+            {isEditing && editMode === 'form' && !profileUrl && <ResourceExtensionsSection resource={draftResource} />}
 
             {isEditing && editMode === 'json' && (
               <Textarea
@@ -310,6 +343,7 @@ export function ResourceCrudPanel<T extends Resource>({
                 setEditMode('form');
                 setDraftResource(resource);
                 setJsonValue(JSON.stringify(resource, null, 2));
+                setCodeFieldOverrides(getCodeFieldOverrideValues(resource));
                 setIsEditing(true);
               }}
             >
@@ -325,6 +359,7 @@ export function ResourceCrudPanel<T extends Resource>({
                 setEditMode('json');
                 setDraftResource(resource);
                 setJsonValue(JSON.stringify(resource, null, 2));
+                setCodeFieldOverrides(getCodeFieldOverrideValues(resource));
                 setIsEditing(true);
               }}
             >
@@ -345,6 +380,7 @@ export function ResourceCrudPanel<T extends Resource>({
                 setError(null);
                 setDraftResource(resource);
                 setJsonValue(JSON.stringify(resource, null, 2));
+                setCodeFieldOverrides(getCodeFieldOverrideValues(resource));
                 setIsEditing(false);
               }}
             >

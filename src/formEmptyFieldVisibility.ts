@@ -1,4 +1,5 @@
 import type { Resource } from '@medplum/fhirtypes';
+import { getOverriddenCodeFieldLabels } from './codeFieldOptions';
 import { getBase } from './fhirClient';
 
 const referenceIdentifierCache = new Map<string, Promise<string | undefined>>();
@@ -176,10 +177,16 @@ export function applyEmptyFieldVisibility(
   });
 
   const sectionHasValue = new Map<HTMLElement, boolean>();
+  const resourceType = (resource as { resourceType?: unknown } | undefined)?.resourceType;
+  const hiddenLabels = new Set(
+    typeof resourceType === 'string' ? getOverriddenCodeFieldLabels(resourceType) : []
+  );
+
   sections
     .slice()
     .sort((a, b) => a.querySelectorAll(selector).length - b.querySelectorAll(selector).length)
     .forEach((section) => {
+      const forcedHidden = hiddenLabels.has(getSectionTitle(section).toLowerCase());
       const directControls = Array.from(
         section.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('input, textarea, select')
       ).filter((control) => control.closest(selector) === section);
@@ -188,9 +195,9 @@ export function applyEmptyFieldVisibility(
       const childSections = childrenBySection.get(section) ?? [];
       const hasPopulatedChildren = childSections.some((child) => sectionHasValue.get(child) === true);
       const hasValue = hasOwnValue || hasPopulatedChildren;
-      const visible = showEmptyFields || hasValue;
+      const visible = !forcedHidden && (showEmptyFields || hasValue);
 
-      sectionHasValue.set(section, hasValue);
+      sectionHasValue.set(section, forcedHidden ? true : hasValue);
       section.style.display = visible ? '' : 'none';
     });
 }
