@@ -230,7 +230,9 @@ export function CreateResourcePage() {
           {editorMode === 'form' && (
             <CodeFieldOverrides
               resourceType={draftResource.resourceType}
+              resource={draftResource}
               values={codeFieldOverrides}
+              showEmptyFields={showEmptyFields}
               onChange={(field, value) => {
                 setCodeFieldOverrides((previous) => {
                   const nextOverrides = { ...previous, [field]: value };
