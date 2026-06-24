@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Button, Paper, SegmentedControl, Select, Stack, Text, Textarea, Title } from '@mantine/core';
+import { Alert, Button, Paper, SegmentedControl, Select, Stack, Switch, Text, Textarea, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ResourceForm } from '@medplum/react';
 import type { ResearchStudy, Resource } from '@medplum/fhirtypes';
 import { IconArrowLeft } from '@tabler/icons-react';
+import { applyEmptyFieldVisibility } from '../formEmptyFieldVisibility';
 import { saveLocalResourceDraft } from '../localCrudStore';
+import { stripEmptyFields } from '../stripEmptyFields';
 
 const RESOURCE_TYPE_OPTIONS = [
   'ResearchStudy',
@@ -45,6 +47,8 @@ export function CreateResourcePage() {
   const [jsonValue, setJsonValue] = useState(JSON.stringify(buildTemplateResource(defaultType), null, 2));
   const [error, setError] = useState<string | null>(null);
   const [isSavingJson, setIsSavingJson] = useState(false);
+  const [showEmptyFields, setShowEmptyFields] = useState(false);
+  const formContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const resourceType = searchParams.get('resourceType') ?? 'ResearchStudy';
@@ -54,6 +58,35 @@ export function CreateResourcePage() {
     setEditorMode('form');
     setError(null);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (editorMode !== 'form' || !formContainerRef.current) {
+      return;
+    }
+
+    const container = formContainerRef.current;
+    const updateVisibility = () => applyEmptyFieldVisibility(container, showEmptyFields);
+
+    updateVisibility();
+
+    const mutationObserver = new MutationObserver(() => updateVisibility());
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['value', 'checked', 'class'],
+    });
+
+    const inputHandler = () => updateVisibility();
+    container.addEventListener('input', inputHandler, true);
+    container.addEventListener('change', inputHandler, true);
+
+    return () => {
+      mutationObserver.disconnect();
+      container.removeEventListener('input', inputHandler, true);
+      container.removeEventListener('change', inputHandler, true);
+    };
+  }, [editorMode, showEmptyFields]);
 
   async function finalizeSave(resource: Resource): Promise<void> {
     saveLocalResourceDraft(resource, 'created');
@@ -179,18 +212,34 @@ export function CreateResourcePage() {
           />
 
           {editorMode === 'form' && (
-            <ResourceForm
-              key={`${draftResource.resourceType}/${draftResource.id ?? 'new'}`}
-              defaultValue={draftResource}
-              onPatch={(next) => {
-                const typed = next as Resource;
-                setDraftResource(typed);
-                setJsonValue(JSON.stringify(typed, null, 2));
-              }}
-              onSubmit={(next) => {
-                void handleFormSubmit(next);
-              }}
+            <Switch
+              label="Show empty fields"
+              checked={showEmptyFields}
+              onChange={(event) => setShowEmptyFields(event.currentTarget.checked)}
             />
+          )}
+
+          {editorMode === 'form' && (
+            <Text size="xs" c="dimmed" mt={-4}>
+              Hidden fields can be shown again with this toggle.
+            </Text>
+          )}
+
+          {editorMode === 'form' && (
+            <div ref={formContainerRef}>
+              <ResourceForm
+                key={`${draftResource.resourceType}/${draftResource.id ?? 'new'}/${showEmptyFields ? 'show-empty' : 'hide-empty'}`}
+                defaultValue={showEmptyFields ? draftResource : stripEmptyFields(draftResource)}
+                onPatch={(next) => {
+                  const typed = next as Resource;
+                  setDraftResource(typed);
+                  setJsonValue(JSON.stringify(typed, null, 2));
+                }}
+                onSubmit={(next) => {
+                  void handleFormSubmit(next);
+                }}
+              />
+            </div>
           )}
 
           {editorMode === 'json' && (

@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Alert, Badge, Button, Group, Paper, SegmentedControl, Stack, Text, Textarea } from '@mantine/core';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Badge, Button, Group, Paper, SegmentedControl, Stack, Switch, Text, Textarea } from '@mantine/core';
 import type { Resource } from '@medplum/fhirtypes';
 import { ResourceForm, ResourceTable } from '@medplum/react';
 import type { LocalResourceMode } from '../localCrudStore';
+import { applyEmptyFieldVisibility } from '../formEmptyFieldVisibility';
+import { stripEmptyFields } from '../stripEmptyFields';
 
 function getStatusColor(localMode: LocalResourceMode | null): string {
   if (localMode === 'created') {
@@ -50,6 +52,8 @@ export function ResourceCrudPanel<T extends Resource>({
   const [draftResource, setDraftResource] = useState(resource);
   const [jsonValue, setJsonValue] = useState(JSON.stringify(resource, null, 2));
   const [error, setError] = useState<string | null>(null);
+  const [showEmptyFields, setShowEmptyFields] = useState(false);
+  const formContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isEditing) {
@@ -57,6 +61,35 @@ export function ResourceCrudPanel<T extends Resource>({
       setJsonValue(JSON.stringify(resource, null, 2));
     }
   }, [isEditing, resource]);
+
+  useEffect(() => {
+    if (!isEditing || editMode !== 'form' || !formContainerRef.current) {
+      return;
+    }
+
+    const container = formContainerRef.current;
+    const updateVisibility = () => applyEmptyFieldVisibility(container, showEmptyFields);
+
+    updateVisibility();
+
+    const mutationObserver = new MutationObserver(() => updateVisibility());
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['value', 'checked', 'class'],
+    });
+
+    const inputHandler = () => updateVisibility();
+    container.addEventListener('input', inputHandler, true);
+    container.addEventListener('change', inputHandler, true);
+
+    return () => {
+      mutationObserver.disconnect();
+      container.removeEventListener('input', inputHandler, true);
+      container.removeEventListener('change', inputHandler, true);
+    };
+  }, [editMode, isEditing, showEmptyFields]);
 
   async function handleJsonSave(): Promise<void> {
     try {
@@ -149,25 +182,46 @@ export function ResourceCrudPanel<T extends Resource>({
             )}
 
             {!isEditing && (
+              <Switch
+                label="Show empty fields"
+                checked={showEmptyFields}
+                onChange={(event) => setShowEmptyFields(event.currentTarget.checked)}
+              />
+            )}
+
+            {!isEditing && (
               <ResourceTable
-                value={resource}
+                value={showEmptyFields ? resource : stripEmptyFields(resource)}
+                ignoreMissingValues={!showEmptyFields}
                 forceUseInput
               />
             )}
 
             {isEditing && editMode === 'form' && (
-              <ResourceForm
-                key={`${resource.resourceType}/${resource.id}`}
-                defaultValue={draftResource}
-                onPatch={(next) => {
-                  const typed = next as T;
-                  setDraftResource(typed);
-                  setJsonValue(JSON.stringify(typed, null, 2));
-                }}
-                onSubmit={(next) => {
-                  void handleFormSubmit(next);
-                }}
-              />
+              <Stack gap="xs">
+                <Switch
+                  label="Show empty fields"
+                  checked={showEmptyFields}
+                  onChange={(event) => setShowEmptyFields(event.currentTarget.checked)}
+                />
+                <Text size="xs" c="dimmed" mt={-4}>
+                  Hidden fields can be shown again with this toggle.
+                </Text>
+                <div ref={formContainerRef}>
+                  <ResourceForm
+                    key={`${resource.resourceType}/${resource.id}/${showEmptyFields ? 'show-empty' : 'hide-empty'}`}
+                    defaultValue={showEmptyFields ? draftResource : stripEmptyFields(draftResource)}
+                    onPatch={(next) => {
+                      const typed = next as T;
+                      setDraftResource(typed);
+                      setJsonValue(JSON.stringify(typed, null, 2));
+                    }}
+                    onSubmit={(next) => {
+                      void handleFormSubmit(next);
+                    }}
+                  />
+                </div>
+              </Stack>
             )}
 
             {isEditing && editMode === 'json' && (
