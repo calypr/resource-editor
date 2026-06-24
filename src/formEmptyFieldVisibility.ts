@@ -140,7 +140,8 @@ function hasMeaningfulControlValue(
 export function applyEmptyFieldVisibility(
   root: HTMLElement,
   showEmptyFields: boolean,
-  resource?: unknown
+  resource?: unknown,
+  overrideLabels?: string[]
 ): void {
   const selector = '[class*="mantine-InputWrapper-root"]';
   const sections = Array.from(root.querySelectorAll<HTMLElement>(selector)).filter(
@@ -178,9 +179,15 @@ export function applyEmptyFieldVisibility(
 
   const sectionHasValue = new Map<HTMLElement, boolean>();
   const resourceType = (resource as { resourceType?: unknown } | undefined)?.resourceType;
-  const hiddenLabels = new Set(
+  const hiddenLabels = new Set<string>(
     typeof resourceType === 'string' ? getOverriddenCodeFieldLabels(resourceType) : []
   );
+  (overrideLabels ?? []).forEach((label) => {
+    const normalized = label.trim().toLowerCase();
+    if (normalized.length > 0) {
+      hiddenLabels.add(normalized);
+    }
+  });
 
   sections
     .slice()

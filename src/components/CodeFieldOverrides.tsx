@@ -9,6 +9,7 @@ interface CodeFieldOverridesProps {
   resource: Resource;
   values: CodeFieldOverrideValues;
   showEmptyFields: boolean;
+  onVisibleFieldLabelsChange?: (labels: string[]) => void;
   onChange: (field: string, value: string | undefined) => void;
 }
 
@@ -17,10 +18,21 @@ function readCodeValue(resource: Resource, field: string): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-export function CodeFieldOverrides({ resourceType, resource, values, showEmptyFields, onChange }: CodeFieldOverridesProps) {
+export function CodeFieldOverrides({
+  resourceType,
+  resource,
+  values,
+  showEmptyFields,
+  onVisibleFieldLabelsChange,
+  onChange,
+}: CodeFieldOverridesProps) {
   const [definitions, setDefinitions] = useState<CodeFieldDefinition[]>([]);
   const [optionsByField, setOptionsByField] = useState<Record<string, CodeFieldOption[]>>({});
   const [loadingFields, setLoadingFields] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    onVisibleFieldLabelsChange?.(definitions.map((definition) => definition.label));
+  }, [definitions, onVisibleFieldLabelsChange]);
 
   useEffect(() => {
     let cancelled = false;

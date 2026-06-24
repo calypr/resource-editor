@@ -58,6 +58,7 @@ export function CreateResourcePage() {
   const [codeFieldOverrides, setCodeFieldOverrides] = useState<CodeFieldOverrideValues>(
     () => getCodeFieldOverrideValues(buildTemplateResource(defaultType))
   );
+  const [resolvedCodeFieldLabels, setResolvedCodeFieldLabels] = useState<string[]>([]);
   const formContainerRef = useRef<HTMLDivElement | null>(null);
   const profileUrl = getResourceProfileUrl(draftResource);
 
@@ -67,6 +68,7 @@ export function CreateResourcePage() {
     setDraftResource(template);
     setJsonValue(JSON.stringify(template, null, 2));
     setCodeFieldOverrides(getCodeFieldOverrideValues(template));
+    setResolvedCodeFieldLabels([]);
     setEditorMode('form');
     setError(null);
   }, [searchParams]);
@@ -78,7 +80,7 @@ export function CreateResourcePage() {
 
     const container = formContainerRef.current;
     const updateVisibility = () => {
-      applyEmptyFieldVisibility(container, showEmptyFields, draftResource);
+      applyEmptyFieldVisibility(container, showEmptyFields, draftResource, resolvedCodeFieldLabels);
       void ensureReferenceIdentifierHints(container, draftResource);
     };
 
@@ -101,7 +103,7 @@ export function CreateResourcePage() {
       container.removeEventListener('input', inputHandler, true);
       container.removeEventListener('change', inputHandler, true);
     };
-  }, [draftResource, editorMode, showEmptyFields]);
+  }, [draftResource, editorMode, showEmptyFields, resolvedCodeFieldLabels]);
 
   async function finalizeSave(resource: Resource): Promise<void> {
     saveLocalResourceDraft(resource, 'created');
@@ -233,6 +235,7 @@ export function CreateResourcePage() {
               resource={draftResource}
               values={codeFieldOverrides}
               showEmptyFields={showEmptyFields}
+              onVisibleFieldLabelsChange={setResolvedCodeFieldLabels}
               onChange={(field, value) => {
                 setCodeFieldOverrides((previous) => {
                   const nextOverrides = { ...previous, [field]: value };

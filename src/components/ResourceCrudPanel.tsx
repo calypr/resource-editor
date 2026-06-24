@@ -70,6 +70,7 @@ export function ResourceCrudPanel<T extends Resource>({
   const [codeFieldOverrides, setCodeFieldOverrides] = useState<CodeFieldOverrideValues>(
     () => getCodeFieldOverrideValues(resource)
   );
+  const [resolvedCodeFieldLabels, setResolvedCodeFieldLabels] = useState<string[]>([]);
   const formContainerRef = useRef<HTMLDivElement | null>(null);
   const readOnlyContainerRef = useRef<HTMLDivElement | null>(null);
   const profileUrl = getResourceProfileUrl(resource);
@@ -89,7 +90,7 @@ export function ResourceCrudPanel<T extends Resource>({
 
     const container = formContainerRef.current;
     const updateVisibility = () => {
-      applyEmptyFieldVisibility(container, showEmptyFields, draftResource);
+      applyEmptyFieldVisibility(container, showEmptyFields, draftResource, resolvedCodeFieldLabels);
       ensureResourceTypeInfoLink(container, resource.resourceType);
       void ensureReferenceIdentifierHints(container, draftResource);
     };
@@ -113,7 +114,7 @@ export function ResourceCrudPanel<T extends Resource>({
       container.removeEventListener('input', inputHandler, true);
       container.removeEventListener('change', inputHandler, true);
     };
-  }, [draftResource, editMode, isEditing, resource.resourceType, showEmptyFields]);
+  }, [draftResource, editMode, isEditing, resource.resourceType, showEmptyFields, resolvedCodeFieldLabels]);
 
   useEffect(() => {
     if (isEditing || !readOnlyContainerRef.current) {
@@ -279,6 +280,7 @@ export function ResourceCrudPanel<T extends Resource>({
                     resource={draftResource}
                     values={codeFieldOverrides}
                     showEmptyFields={showEmptyFields}
+                    onVisibleFieldLabelsChange={setResolvedCodeFieldLabels}
                     onChange={(field, value) => {
                       setCodeFieldOverrides((previous) => {
                         const nextOverrides = { ...previous, [field]: value };
@@ -346,6 +348,7 @@ export function ResourceCrudPanel<T extends Resource>({
                 setDraftResource(resource);
                 setJsonValue(JSON.stringify(resource, null, 2));
                 setCodeFieldOverrides(getCodeFieldOverrideValues(resource));
+                setResolvedCodeFieldLabels([]);
                 setIsEditing(true);
               }}
             >
@@ -362,6 +365,7 @@ export function ResourceCrudPanel<T extends Resource>({
                 setDraftResource(resource);
                 setJsonValue(JSON.stringify(resource, null, 2));
                 setCodeFieldOverrides(getCodeFieldOverrideValues(resource));
+                setResolvedCodeFieldLabels([]);
                 setIsEditing(true);
               }}
             >
@@ -383,6 +387,7 @@ export function ResourceCrudPanel<T extends Resource>({
                 setDraftResource(resource);
                 setJsonValue(JSON.stringify(resource, null, 2));
                 setCodeFieldOverrides(getCodeFieldOverrideValues(resource));
+                setResolvedCodeFieldLabels([]);
                 setIsEditing(false);
               }}
             >
