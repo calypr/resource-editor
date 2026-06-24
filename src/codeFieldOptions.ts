@@ -393,8 +393,10 @@ function valueSetToOptions(valueSet: ValueSetResource | undefined): CodeFieldOpt
   return dedupeOptions(composedConcepts);
 }
 
+const TX_FHIR_ORG_BASE = `${window.location.origin}/tx-proxy`;
+
 async function expandValueSetFromFhirServer(valueSetUrl: string): Promise<CodeFieldOption[]> {
-  const expandUrl = `${normalizeBaseUrl(getBase())}/ValueSet/$expand?url=${encodeURIComponent(valueSetUrl)}`;
+  const expandUrl = `${TX_FHIR_ORG_BASE}/ValueSet/$expand?url=${encodeURIComponent(valueSetUrl)}`;
   const expanded = await fetchJson<ValueSetResource>(expandUrl);
   return valueSetToOptions(expanded);
 }
