@@ -5,7 +5,7 @@ import { notifications } from '@mantine/notifications';
 import { ResourceForm } from '@medplum/react';
 import type { ResearchStudy, Resource } from '@medplum/fhirtypes';
 import { IconArrowLeft } from '@tabler/icons-react';
-import { applyEmptyFieldVisibility } from '../formEmptyFieldVisibility';
+import { applyEmptyFieldVisibility, ensureReferenceIdentifierHints } from '../formEmptyFieldVisibility';
 import { saveLocalResourceDraft } from '../localCrudStore';
 import { stripEmptyFields } from '../stripEmptyFields';
 
@@ -65,7 +65,10 @@ export function CreateResourcePage() {
     }
 
     const container = formContainerRef.current;
-    const updateVisibility = () => applyEmptyFieldVisibility(container, showEmptyFields);
+    const updateVisibility = () => {
+      applyEmptyFieldVisibility(container, showEmptyFields, draftResource);
+      void ensureReferenceIdentifierHints(container, draftResource);
+    };
 
     updateVisibility();
 
@@ -86,7 +89,7 @@ export function CreateResourcePage() {
       container.removeEventListener('input', inputHandler, true);
       container.removeEventListener('change', inputHandler, true);
     };
-  }, [editorMode, showEmptyFields]);
+  }, [draftResource, editorMode, showEmptyFields]);
 
   async function finalizeSave(resource: Resource): Promise<void> {
     saveLocalResourceDraft(resource, 'created');

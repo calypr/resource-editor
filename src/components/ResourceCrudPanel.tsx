@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Alert, Badge, Button, Group, Paper, SegmentedControl, Stack, Switch, Text, Textarea } from '@mantine/core';
 import type { Resource } from '@medplum/fhirtypes';
 import { ResourceForm, ResourceTable } from '@medplum/react';
+import { useNavigate } from 'react-router-dom';
 import type { LocalResourceMode } from '../localCrudStore';
-import { applyEmptyFieldVisibility } from '../formEmptyFieldVisibility';
+import {
+  applyEmptyFieldVisibility,
+  ensureReadOnlyReferenceIdentifierHints,
+  ensureReferenceIdentifierHints,
+  ensureResourceTypeInfoLink,
+} from '../formEmptyFieldVisibility';
 import { stripEmptyFields } from '../stripEmptyFields';
 
 function getStatusColor(localMode: LocalResourceMode | null): string {
@@ -47,6 +53,7 @@ export function ResourceCrudPanel<T extends Resource>({
   onRestore,
   isDeleted = false,
 }: TypedResourceCrudPanelProps<T>) {
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [editMode, setEditMode] = useState<'form' | 'json'>('form');
   const [draftResource, setDraftResource] = useState(resource);
@@ -54,6 +61,7 @@ export function ResourceCrudPanel<T extends Resource>({
   const [error, setError] = useState<string | null>(null);
   const [showEmptyFields, setShowEmptyFields] = useState(false);
   const formContainerRef = useRef<HTMLDivElement | null>(null);
+  const readOnlyContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isEditing) {
@@ -68,7 +76,11 @@ export function ResourceCrudPanel<T extends Resource>({
     }
 
     const container = formContainerRef.current;
-    const updateVisibility = () => applyEmptyFieldVisibility(container, showEmptyFields);
+    const updateVisibility = () => {
+      applyEmptyFieldVisibility(container, showEmptyFields, draftResource);
+      ensureResourceTypeInfoLink(container, resource.resourceType);
+      void ensureReferenceIdentifierHints(container, draftResource);
+    };
 
     updateVisibility();
 
@@ -89,7 +101,51 @@ export function ResourceCrudPanel<T extends Resource>({
       container.removeEventListener('input', inputHandler, true);
       container.removeEventListener('change', inputHandler, true);
     };
-  }, [editMode, isEditing, showEmptyFields]);
+  }, [draftResource, editMode, isEditing, resource.resourceType, showEmptyFields]);
+
+  useEffect(() => {
+    if (isEditing || !readOnlyContainerRef.current) {
+      return;
+    }
+
+    const container = readOnlyContainerRef.current;
+    void ensureReadOnlyReferenceIdentifierHints(container);
+  }, [isEditing, resource]);
+
+  useEffect(() => {
+    if (isEditing || !readOnlyContainerRef.current) {
+      return;
+    }
+
+    const container = readOnlyContainerRef.current;
+
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+
+      const link = target.closest('a');
+      if (!(link instanceof HTMLAnchorElement)) {
+        return;
+      }
+
+      const href = link.getAttribute('href') ?? '';
+      if (!href.startsWith('/resource/') && !href.startsWith('/study/')) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      void navigate(href);
+    };
+
+    container.addEventListener('click', handleClick, true);
+
+    return () => {
+      container.removeEventListener('click', handleClick, true);
+    };
+  }, [isEditing, resource]);
 
   async function handleJsonSave(): Promise<void> {
     try {
@@ -190,11 +246,13 @@ export function ResourceCrudPanel<T extends Resource>({
             )}
 
             {!isEditing && (
-              <ResourceTable
-                value={showEmptyFields ? resource : stripEmptyFields(resource)}
-                ignoreMissingValues={!showEmptyFields}
-                forceUseInput
-              />
+              <div ref={readOnlyContainerRef}>
+                <ResourceTable
+                  value={showEmptyFields ? resource : stripEmptyFields(resource)}
+                  ignoreMissingValues={!showEmptyFields}
+                  forceUseInput
+                />
+              </div>
             )}
 
             {isEditing && editMode === 'form' && (
