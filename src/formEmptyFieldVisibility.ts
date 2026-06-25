@@ -448,6 +448,7 @@ export function ensureResourceTypeInfoLink(root: HTMLElement, resourceType: stri
   link.target = '_blank';
   link.rel = 'noreferrer noopener';
   link.title = `Open ${resourceType} in IG`;
+  link.setAttribute('aria-label', `Open ${resourceType} in implementation guide`);
   link.textContent = 'i';
   link.style.display = 'inline-flex';
   link.style.alignItems = 'center';
