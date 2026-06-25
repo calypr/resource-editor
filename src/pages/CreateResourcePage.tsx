@@ -1,11 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Alert, Button, Paper, SegmentedControl, Select, Stack, Text, Textarea, Title } from '@mantine/core';
+import { Alert, Button, Paper, SegmentedControl, Select, Stack, Switch, Text, Textarea, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { ResourceForm } from '@medplum/react';
 import type { ResearchStudy, Resource } from '@medplum/fhirtypes';
 import { IconArrowLeft } from '@tabler/icons-react';
+import {
+  applyCodeFieldOverrides,
+  getCodeFieldOverrideValues,
+  type CodeFieldOverrideValues,
+} from '../codeFieldOptions';
+import { CodeFieldOverrides } from '../components/CodeFieldOverrides';
+import { applyEmptyFieldVisibility, ensureReferenceIdentifierHints } from '../formEmptyFieldVisibility';
 import { saveLocalResourceDraft } from '../localCrudStore';
+import { stripEmptyFields } from '../stripEmptyFields';
+import { getResourceProfileUrl, ResourceExtensionsSection } from '../components/ResourceExtensionsSection';
 
 const RESOURCE_TYPE_OPTIONS = [
   'ResearchStudy',
@@ -45,15 +54,56 @@ export function CreateResourcePage() {
   const [jsonValue, setJsonValue] = useState(JSON.stringify(buildTemplateResource(defaultType), null, 2));
   const [error, setError] = useState<string | null>(null);
   const [isSavingJson, setIsSavingJson] = useState(false);
+  const [showEmptyFields, setShowEmptyFields] = useState(false);
+  const [codeFieldOverrides, setCodeFieldOverrides] = useState<CodeFieldOverrideValues>(
+    () => getCodeFieldOverrideValues(buildTemplateResource(defaultType))
+  );
+  const [resolvedCodeFieldLabels, setResolvedCodeFieldLabels] = useState<string[]>([]);
+  const formContainerRef = useRef<HTMLDivElement | null>(null);
+  const profileUrl = getResourceProfileUrl(draftResource);
 
   useEffect(() => {
     const resourceType = searchParams.get('resourceType') ?? 'ResearchStudy';
     const template = buildTemplateResource(resourceType);
     setDraftResource(template);
     setJsonValue(JSON.stringify(template, null, 2));
+    setCodeFieldOverrides(getCodeFieldOverrideValues(template));
+    setResolvedCodeFieldLabels([]);
     setEditorMode('form');
     setError(null);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (editorMode !== 'form' || !formContainerRef.current) {
+      return;
+    }
+
+    const container = formContainerRef.current;
+    const updateVisibility = () => {
+      applyEmptyFieldVisibility(container, showEmptyFields, draftResource, resolvedCodeFieldLabels);
+      void ensureReferenceIdentifierHints(container, draftResource);
+    };
+
+    updateVisibility();
+
+    const mutationObserver = new MutationObserver(() => updateVisibility());
+    mutationObserver.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['value', 'checked', 'class'],
+    });
+
+    const inputHandler = () => updateVisibility();
+    container.addEventListener('input', inputHandler, true);
+    container.addEventListener('change', inputHandler, true);
+
+    return () => {
+      mutationObserver.disconnect();
+      container.removeEventListener('input', inputHandler, true);
+      container.removeEventListener('change', inputHandler, true);
+    };
+  }, [draftResource, editorMode, showEmptyFields, resolvedCodeFieldLabels]);
 
   async function finalizeSave(resource: Resource): Promise<void> {
     saveLocalResourceDraft(resource, 'created');
@@ -94,17 +144,18 @@ export function CreateResourcePage() {
   async function handleFormSubmit(nextResource: Resource): Promise<void> {
     try {
       setError(null);
-      const nextResourceType = nextResource.resourceType.trim();
+      const mergedResource = applyCodeFieldOverrides(nextResource, codeFieldOverrides);
+      const nextResourceType = mergedResource.resourceType.trim();
       if (!nextResourceType) {
         throw new Error('resourceType is required');
       }
 
-      const nextId = typeof nextResource.id === 'string' && nextResource.id.trim()
-        ? nextResource.id.trim()
+      const nextId = typeof mergedResource.id === 'string' && mergedResource.id.trim()
+        ? mergedResource.id.trim()
         : crypto.randomUUID();
 
       const normalized = {
-        ...nextResource,
+        ...mergedResource,
         resourceType: nextResourceType,
         id: nextId,
       } as Resource;
@@ -179,18 +230,56 @@ export function CreateResourcePage() {
           />
 
           {editorMode === 'form' && (
-            <ResourceForm
-              key={`${draftResource.resourceType}/${draftResource.id ?? 'new'}`}
-              defaultValue={draftResource}
-              onPatch={(next) => {
-                const typed = next as Resource;
-                setDraftResource(typed);
-                setJsonValue(JSON.stringify(typed, null, 2));
-              }}
-              onSubmit={(next) => {
-                void handleFormSubmit(next);
+            <CodeFieldOverrides
+              resourceType={draftResource.resourceType}
+              resource={draftResource}
+              values={codeFieldOverrides}
+              showEmptyFields={showEmptyFields}
+              onVisibleFieldLabelsChange={setResolvedCodeFieldLabels}
+              onChange={(field, value) => {
+                setCodeFieldOverrides((previous) => {
+                  const nextOverrides = { ...previous, [field]: value };
+                  const nextDraft = applyCodeFieldOverrides(draftResource, nextOverrides);
+                  setDraftResource(nextDraft);
+                  setJsonValue(JSON.stringify(nextDraft, null, 2));
+                  return nextOverrides;
+                });
               }}
             />
+          )}
+
+          {editorMode === 'form' && (
+            <Switch
+              label="Show empty fields"
+              checked={showEmptyFields}
+              onChange={(event) => setShowEmptyFields(event.currentTarget.checked)}
+            />
+          )}
+
+          {editorMode === 'form' && (
+            <Text size="xs" c="dimmed" mt={-4}>
+              Hidden fields can be shown again with this toggle.
+            </Text>
+          )}
+
+          {editorMode === 'form' && !profileUrl && <ResourceExtensionsSection resource={draftResource} />}
+
+          {editorMode === 'form' && (
+            <div ref={formContainerRef}>
+              <ResourceForm
+                key={`${draftResource.resourceType}/${draftResource.id ?? 'new'}/${showEmptyFields ? 'show-empty' : 'hide-empty'}`}
+                defaultValue={showEmptyFields ? draftResource : stripEmptyFields(draftResource)}
+                profileUrl={profileUrl}
+                onPatch={(next) => {
+                  const typed = applyCodeFieldOverrides(next as Resource, codeFieldOverrides);
+                  setDraftResource(typed);
+                  setJsonValue(JSON.stringify(typed, null, 2));
+                }}
+                onSubmit={(next) => {
+                  void handleFormSubmit(next);
+                }}
+              />
+            </div>
           )}
 
           {editorMode === 'json' && (

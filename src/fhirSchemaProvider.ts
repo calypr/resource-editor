@@ -1,12 +1,17 @@
 import {
   MedplumClient,
+  ReadablePromise,
   indexStructureDefinitionBundle,
   tryGetDataType,
   tryGetProfile,
   type MedplumClientOptions,
+  type MedplumRequestOptions,
   type RequestProfileSchemaOptions,
+  type ValueSetExpandParams,
 } from '@medplum/core';
-import type { Bundle, StructureDefinition } from '@medplum/fhirtypes';
+import type { Bundle, StructureDefinition, ValueSet } from '@medplum/fhirtypes';
+
+const TX_FHIR_ORG_BASE = `${window.location.origin}/tx-proxy`;
 
 const DEFAULT_R5_PROFILE_PREFIX = 'http://hl7.org/fhir/StructureDefinition/';
 
@@ -155,5 +160,50 @@ export class SchemaAwareMedplumClient extends MedplumClient {
     }
 
     return super.requestProfileSchema(profileUrl, options);
+  }
+
+  override searchValueSet(
+    system: string,
+    filter: string,
+    options?: MedplumRequestOptions
+  ): ReadablePromise<ValueSet> {
+    const params = new URLSearchParams({ url: system });
+    if (filter) {
+      params.set('filter', filter);
+    }
+
+    const url = `${TX_FHIR_ORG_BASE}/ValueSet/$expand?${params.toString()}`;
+    return new ReadablePromise(
+      fetch(url, { headers: { Accept: 'application/fhir+json' }, signal: options?.signal })
+        .then((res) => res.json() as Promise<ValueSet>)
+    );
+  }
+
+  override valueSetExpand(
+    params: ValueSetExpandParams,
+    options?: MedplumRequestOptions
+  ): ReadablePromise<ValueSet> {
+    const qs = new URLSearchParams();
+    if (params.url) {
+      qs.set('url', params.url);
+    }
+
+    if (params.filter) {
+      qs.set('filter', params.filter);
+    }
+
+    if (params.count !== undefined) {
+      qs.set('count', String(params.count));
+    }
+
+    if (params.offset !== undefined) {
+      qs.set('offset', String(params.offset));
+    }
+
+    const url = `${TX_FHIR_ORG_BASE}/ValueSet/$expand?${qs.toString()}`;
+    return new ReadablePromise(
+      fetch(url, { headers: { Accept: 'application/fhir+json' }, signal: options?.signal })
+        .then((res) => res.json() as Promise<ValueSet>)
+    );
   }
 }

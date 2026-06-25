@@ -15,6 +15,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/schema-proxy/, ''),
       },
+      '/tx-proxy': {
+        target: 'https://tx.fhir.org/r4',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/tx-proxy/, ''),
+      },
     },
   },
 });

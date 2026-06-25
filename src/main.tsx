@@ -37,6 +37,24 @@ const toAbsoluteHttpUrl = (url: string): string => {
   return ensureTrailingSlash(url);
 };
 
+const toDevSchemaProxyUrl = (url: string): string => {
+  if (!isDev) {
+    return url;
+  }
+
+  try {
+    const parsed = new URL(url);
+    if (parsed.origin !== 'https://hl7.org' || !parsed.pathname.startsWith('/fhir/')) {
+      return url;
+    }
+
+    const schemaPath = parsed.pathname.replace(/^\/fhir\/?/, '');
+    return `${window.location.origin}/schema-proxy/${schemaPath}`;
+  } catch {
+    return url;
+  }
+};
+
 const fhirBaseUrl = toAbsoluteHttpUrl(
   configuredFhirBaseUrl
     ? configuredFhirBaseUrl
@@ -46,7 +64,7 @@ const fhirBaseUrl = toAbsoluteHttpUrl(
 );
 
 const schemaBaseUrl = configuredSchemaBaseUrl
-  ? configuredSchemaBaseUrl
+  ? toDevSchemaProxyUrl(configuredSchemaBaseUrl)
   : isDev
     ? window.location.origin + '/schema-proxy/R5'
     : 'https://hl7.org/fhir/R5';

@@ -4,7 +4,6 @@ import { Alert, Button, Center, Loader, Stack, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import type { Resource } from '@medplum/fhirtypes';
 import { IconArrowLeft } from '@tabler/icons-react';
-import { RawFhirJson } from '../components/RawFhirJson';
 import { fhirRead } from '../fhirClient';
 import { ResourceCrudPanel } from '../components/ResourceCrudPanel';
 import {
@@ -146,7 +145,6 @@ export function ResourceDetailPage() {
         onDelete={handleDelete}
         onRestore={handleRestore}
       />
-      <RawFhirJson resource={resource} />
     </Stack>
   );
 }
