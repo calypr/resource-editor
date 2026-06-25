@@ -91,14 +91,14 @@ export function CodeFieldOverrides({
     return null;
   }
 
-    const visibleDefinitions = definitions.filter((definition) => {
-      if (showEmptyFields) {
-        return true;
-      }
+  const visibleDefinitions = definitions.filter((definition) => {
+    if (showEmptyFields || definition.required) {
+      return true;
+    }
 
-      const value = values[definition.field] ?? readCodeValue(resource, definition.field);
-      return typeof value === 'string' && value.trim().length > 0;
-    });
+    const value = values[definition.field] ?? readCodeValue(resource, definition.field);
+    return typeof value === 'string' && value.trim().length > 0;
+  });
 
     if (visibleDefinitions.length === 0) {
       return null;

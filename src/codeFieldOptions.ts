@@ -1,5 +1,4 @@
 import type { Resource } from '@medplum/fhirtypes';
-import { getBase } from './fhirClient';
 
 export interface CodeFieldOption {
   value: string;
@@ -516,8 +515,14 @@ export function applyCodeFieldOverrides<T extends Resource>(
   const next = { ...resource } as Record<string, unknown>;
   definitions.forEach((definition) => {
     const overrideValue = overrides[definition.field];
+
     if (typeof overrideValue === 'string' && overrideValue.trim().length > 0) {
-      next[definition.field] = overrideValue;
+      next[definition.field] = overrideValue.trim();
+      return;
+    }
+
+    if (!definition.required) {
+      delete next[definition.field];
     }
   });
 
