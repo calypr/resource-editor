@@ -49,3 +49,6 @@ Thumbs.db
 .idea
 *.swp
 *.swo
+
+# working files
+attic/
